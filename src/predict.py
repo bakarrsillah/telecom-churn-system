@@ -1,38 +1,25 @@
 import joblib
+import os
 import pandas as pd
 
-# -------------------------
-# LOAD MODEL + FEATURES
-# -------------------------
-model = joblib.load("models/churn_model.pkl")
-feature_names = joblib.load("models/features.pkl")
+# Absolute paths for Streamlit Cloud
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "../models/churn_model.pkl")
+FEATURES_PATH = os.path.join(BASE_DIR, "../models/features.pkl")
 
+model = joblib.load(MODEL_PATH)
+feature_names = joblib.load(FEATURES_PATH)
 
-# -------------------------
-# PREDICTION FUNCTION
-# -------------------------
 def predict_churn(X: pd.DataFrame):
-
-    # Ensure same features as training
     X = X.copy()
-
-    # Add missing columns
+    # Align features
     for col in feature_names:
         if col not in X.columns:
             X[col] = 0
-
-    # Remove extra columns
     X = X[feature_names]
-
-    # Predict probabilities
     probs = model.predict_proba(X)[:, 1]
-
     return probs
 
-
-# -------------------------
-# RISK SCORING
-# -------------------------
 def assign_risk(prob):
     if prob > 0.75:
         return "High"
@@ -41,10 +28,6 @@ def assign_risk(prob):
     else:
         return "Low"
 
-
-# -------------------------
-# RECOMMENDATION ENGINE
-# -------------------------
 def recommend_action(risk):
     if risk == "High":
         return "Offer 1GB bonus / discount"
