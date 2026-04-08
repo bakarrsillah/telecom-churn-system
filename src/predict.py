@@ -1,38 +1,25 @@
 import joblib
-import pandas as pd
 
-# -------------------------
-# LOAD MODEL
-# -------------------------
-def load_model():
-    return joblib.load("models/churn_model.pkl")
+model = joblib.load("models/churn_model.pkl")
 
-# -------------------------
-# PREDICT PROBABILITY
-# -------------------------
-def predict_churn(df):
-    model = load_model()
-    probs = model.predict_proba(df)[:, 1]
-    return probs
 
-# -------------------------
-# RISK CLASSIFICATION
-# -------------------------
+def predict_churn(X):
+    return model.predict_proba(X)[:, 1]
+
+
 def assign_risk(prob):
-    if prob < 0.4:
-        return "Low"
-    elif prob < 0.7:
+    if prob > 0.75:
+        return "High"
+    elif prob > 0.4:
         return "Medium"
     else:
-        return "High"
+        return "Low"
 
-# -------------------------
-# BUSINESS RECOMMENDATION
-# -------------------------
+
 def recommend_action(risk):
     if risk == "High":
-        return "Offer discount / retention package"
+        return "Offer 1GB bonus / discount"
     elif risk == "Medium":
-        return "Send targeted promotion"
+        return "Send promotional SMS"
     else:
         return "Maintain engagement"
