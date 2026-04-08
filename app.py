@@ -20,7 +20,6 @@ Identify customers likely to churn and recommend retention actions.
 st.sidebar.header("⚙️ Controls")
 
 uploaded_file = st.sidebar.file_uploader("Upload CSV")
-
 use_sample = st.sidebar.button("Use Sample Data")
 
 risk_filter = st.sidebar.selectbox(
@@ -50,6 +49,10 @@ def validate_data(df):
         if (df["tenure"] < 0).any():
             errors.append("Tenure cannot be negative")
 
+    if "monthly_charges" in df.columns:
+        if (df["monthly_charges"] < 0).any():
+            errors.append("Monthly charges cannot be negative")
+
     return errors
 
 
@@ -61,7 +64,7 @@ if errors:
     st.stop()
 
 # -------------------------
-# PREPROCESSING
+# PROCESSING
 # -------------------------
 try:
     df = clean_data(df)
@@ -111,7 +114,7 @@ st.subheader("🚨 High Risk Customers")
 st.dataframe(df[df["risk_level"] == "High"])
 
 # -------------------------
-# VISUALS
+# VISUALIZATION
 # -------------------------
 st.subheader("📊 Risk Distribution")
 st.bar_chart(df["risk_level"].value_counts())
