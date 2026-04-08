@@ -5,107 +5,132 @@ from src.preprocess import clean_data, encode_data, scale_data
 from src.features import create_features
 from src.predict import predict_churn, assign_risk, recommend_action
 
-# -------------------------
-# PAGE CONFIG
-# -------------------------
 st.set_page_config(page_title="Telecom Churn System", layout="wide")
 
 st.title("📡 Telecom Churn Prediction System")
-st.markdown("Predict customer churn and generate retention strategies.")
+
+st.markdown("""
+### 💡 Business Objective
+Identify customers likely to churn and recommend retention actions.
+""")
 
 # -------------------------
 # SIDEBAR
 # -------------------------
 st.sidebar.header("⚙️ Controls")
 
-uploaded_file = st.sidebar.file_uploader("Upload Telecom Dataset (CSV)")
+uploaded_file = st.sidebar.file_uploader("Upload CSV")
+
+use_sample = st.sidebar.button("Use Sample Data")
 
 risk_filter = st.sidebar.selectbox(
-    "Filter by Risk Level",
+    "Filter by Risk",
     ["All", "High", "Medium", "Low"]
 )
 
 # -------------------------
-# MAIN APP
+# LOAD DATA
 # -------------------------
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
+elif use_sample:
+    df = pd.read_csv("data/raw.csv")
+    st.success("Using sample dataset")
+else:
+    st.info("Upload a dataset to begin")
+    st.stop()
 
-    st.subheader("📊 Raw Data Preview")
-    st.dataframe(df.head())
+# -------------------------
+# VALIDATION
+# -------------------------
+def validate_data(df):
+    errors = []
 
-    # -------------------------
-    # PROCESSING PIPELINE
-    # -------------------------
+    if "tenure" in df.columns:
+        if (df["tenure"] < 0).any():
+            errors.append("Tenure cannot be negative")
+
+    return errors
+
+
+errors = validate_data(df)
+
+if errors:
+    for e in errors:
+        st.error(e)
+    st.stop()
+
+# -------------------------
+# PREPROCESSING
+# -------------------------
+try:
     df = clean_data(df)
     df = encode_data(df)
     df = create_features(df)
     df = scale_data(df)
 
-    # Separate features
     X = df.drop(columns=["churn"])
 
-    # -------------------------
-    # PREDICTIONS
-    # -------------------------
     probs = predict_churn(X)
 
-    df["churn_probability"] = probs
-    df["risk_level"] = df["churn_probability"].apply(assign_risk)
-    df["action"] = df["risk_level"].apply(recommend_action)
+except Exception as e:
+    st.error(f"Error: {e}")
+    st.stop()
 
-    # -------------------------
-    # METRICS (🔥 IMPORTANT)
-    # -------------------------
-    st.subheader("📊 Key Metrics")
+# -------------------------
+# OUTPUT
+# -------------------------
+df["churn_probability"] = probs
+df["risk_level"] = df["churn_probability"].apply(assign_risk)
+df["action"] = df["risk_level"].apply(recommend_action)
 
-    col1, col2, col3 = st.columns(3)
+# -------------------------
+# METRICS
+# -------------------------
+st.subheader("📊 Key Metrics")
 
-    col1.metric("Total Customers", len(df))
-    col2.metric("High Risk Customers", (df["risk_level"] == "High").sum())
-    col3.metric(
-        "Avg Churn Probability",
-        round(df["churn_probability"].mean(), 2)
-    )
+col1, col2, col3 = st.columns(3)
 
-    # -------------------------
-    # FILTER DATA
-    # -------------------------
-    if risk_filter != "All":
-        df = df[df["risk_level"] == risk_filter]
+col1.metric("Customers", len(df))
+col2.metric("High Risk", (df["risk_level"] == "High").sum())
+col3.metric("Avg Risk", round(df["churn_probability"].mean(), 2))
 
-    # -------------------------
-    # PREDICTION TABLE
-    # -------------------------
-    st.subheader("📈 Predictions")
-    st.dataframe(df)
+# -------------------------
+# FILTER
+# -------------------------
+if risk_filter != "All":
+    df = df[df["risk_level"] == risk_filter]
 
-    # -------------------------
-    # HIGH RISK SECTION
-    # -------------------------
-    st.subheader("🚨 High Risk Customers")
-    high_risk = df[df["risk_level"] == "High"]
-    st.dataframe(high_risk)
+# -------------------------
+# TABLES
+# -------------------------
+st.subheader("📈 Predictions")
+st.dataframe(df)
 
-    # -------------------------
-    # VISUALIZATION
-    # -------------------------
-    st.subheader("📊 Risk Distribution")
-    st.bar_chart(df["risk_level"].value_counts())
+st.subheader("🚨 High Risk Customers")
+st.dataframe(df[df["risk_level"] == "High"])
 
-    # -------------------------
-    # DOWNLOAD RESULTS (🔥 ELITE)
-    # -------------------------
-    st.subheader("⬇️ Download Results")
+# -------------------------
+# VISUALS
+# -------------------------
+st.subheader("📊 Risk Distribution")
+st.bar_chart(df["risk_level"].value_counts())
 
-    csv = df.to_csv(index=False).encode("utf-8")
+# -------------------------
+# INSIGHTS
+# -------------------------
+st.subheader("💡 Insights")
 
-    st.download_button(
-        label="Download Predictions CSV",
-        data=csv,
-        file_name="churn_predictions.csv",
-        mime="text/csv"
-    )
+high_pct = (df["risk_level"] == "High").mean() * 100
+st.write(f"{round(high_pct,2)}% customers are high risk")
 
-else:
-    st.info("⬅️ Upload a CSV file from the sidebar to begin.")
+# -------------------------
+# DOWNLOAD
+# -------------------------
+csv = df.to_csv(index=False).encode("utf-8")
+
+st.download_button(
+    "Download Predictions",
+    data=csv,
+    file_name="predictions.csv"
+)
