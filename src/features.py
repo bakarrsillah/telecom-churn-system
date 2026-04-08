@@ -1,26 +1,26 @@
 import pandas as pd
 
 def create_features(df):
-    # -------------------------
-    # USAGE INTENSITY
-    # -------------------------
-    df['usage_intensity'] = df['calls_per_day'] * df['avg_call_duration']
+    df = df.copy()
 
-    # -------------------------
-    # CUSTOMER ENGAGEMENT SCORE
-    # -------------------------
-    df['engagement_score'] = (
-        df['calls_per_day'] + df['data_usage_mb_per_day']
-    ) / (df['days_since_last_activity'] + 1)
+    # Tenure grouping
+    if "tenure" in df.columns:
+        df["tenure_group"] = pd.cut(
+            df["tenure"],
+            bins=[0, 12, 24, 60],
+            labels=["0-12", "12-24", "24+"]
+        )
 
-    # -------------------------
-    # REVENUE RISK
-    # -------------------------
-    df['revenue_risk'] = df['monthly_charge'] / (df['tenure_months'] + 1)
+    # Avg monthly usage
+    if "total_charges" in df.columns and "tenure" in df.columns:
+        df["avg_monthly_usage"] = df["total_charges"] / (df["tenure"] + 1)
 
-    # -------------------------
-    # COMPLAINT RATIO
-    # -------------------------
-    df['complaint_ratio'] = df['num_complaints'] / (df['tenure_months'] + 1)
+    # Engagement score
+    if "contract" in df.columns:
+        df["engagement_score"] = df["contract"].map({
+            "Month-to-month": 1,
+            "One year": 2,
+            "Two year": 3
+        }).fillna(1)
 
     return df
