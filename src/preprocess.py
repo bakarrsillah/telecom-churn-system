@@ -4,8 +4,8 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 def clean_data(df):
     df = df.copy()
 
-    # Handle missing values
-    df.fillna(method="ffill", inplace=True)
+    # ✅ FIXED for pandas v2+
+    df = df.ffill()
 
     return df
 
