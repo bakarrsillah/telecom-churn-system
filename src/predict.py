@@ -1,6 +1,9 @@
 import joblib
 import os
 
+# -------------------------
+# LOAD PIPELINE
+# -------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PIPELINE_PATH = os.path.join(BASE_DIR, "../models/churn_pipeline.pkl")
 
@@ -13,6 +16,9 @@ def load_pipeline():
         pipeline = joblib.load(PIPELINE_PATH)
 
 
+# -------------------------
+# PREDICT CHURN (ONLY PROBABILITY)
+# -------------------------
 def predict_churn(df):
 
     load_pipeline()
@@ -22,6 +28,9 @@ def predict_churn(df):
     return probs
 
 
+# -------------------------
+# RISK SCORING
+# -------------------------
 def assign_risk(prob):
     if prob > 0.75:
         return "High"
@@ -31,6 +40,9 @@ def assign_risk(prob):
         return "Low"
 
 
+# -------------------------
+# RECOMMENDATION ENGINE
+# -------------------------
 def recommend_action(risk):
     if risk == "High":
         return "Offer 1GB bonus / discount"
