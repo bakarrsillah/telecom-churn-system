@@ -1,6 +1,14 @@
 import streamlit as st
 import pandas as pd
 import os
+import sys
+from pathlib import Path
+
+# -------------------------
+# FORCE ROOT PATH (CLOUD SAFE)
+# -------------------------
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
 
 import predict
 import business
