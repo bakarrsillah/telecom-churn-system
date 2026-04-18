@@ -3,14 +3,15 @@
 # =========================
 import streamlit as st
 import pandas as pd
+import numpy as np
 import os
 import sys
 from pathlib import Path
 import shap
 
-# Ensure project root is accessible
+# Ensure project root path
 ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
+sys.path.append(str(ROOT))
 
 import predict
 import business
@@ -40,24 +41,24 @@ elif use_sample:
     df = pd.read_csv("data/raw.csv")
 
 else:
-    st.info("Upload a dataset or click sample data")
+    st.info("Upload dataset or click sample data")
     st.stop()
 
 # =========================
-# TRAIN MODEL IF NEEDED
+# TRAIN MODEL IF NOT EXISTS
 # =========================
 if not os.path.exists("models/churn_pipeline.pkl"):
     st.warning("Training model...")
 
     if "churn" not in df.columns:
-        st.error("Dataset must contain 'churn' column")
+        st.error("Dataset must include 'churn'")
         st.stop()
 
     train_model.train_pipeline(df)
     st.success("Model trained successfully")
 
 # =========================
-# PREDICTION
+# PREDICTIONS
 # =========================
 X = df.drop(columns=["churn"], errors="ignore")
 
@@ -67,7 +68,7 @@ df["churn_probability"] = probs
 df["risk"] = df["churn_probability"].apply(predict.assign_risk)
 
 # =========================
-# BUSINESS LAYER
+# BUSINESS ENGINE
 # =========================
 df = business.calculate_revenue(df)
 df = business.calculate_priority(df)
@@ -76,39 +77,38 @@ df = business.segment_customers(df)
 df["action"] = df.apply(business.smart_action, axis=1)
 
 # =========================
-# METRICS
+# DASHBOARD METRICS
 # =========================
 st.subheader("📊 Overview")
 
-col1, col2, col3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-col1.metric("Customers", len(df))
-col2.metric("High Risk", (df["risk"] == "High").sum())
-col3.metric("Avg Churn", round(df["churn_probability"].mean(), 2))
+c1.metric("Customers", len(df))
+c2.metric("High Risk", (df["risk"] == "High").sum())
+c3.metric("Avg Churn", round(df["churn_probability"].mean(), 3))
 
 # =========================
 # BUSINESS IMPACT
 # =========================
 st.subheader("💰 Business Impact")
 
-col1, col2, col3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-col1.metric("Revenue at Risk", f"${df['revenue_at_risk'].sum():,.2f}")
-col2.metric("High Risk Customers", (df["risk"] == "High").sum())
-col3.metric("Avg Priority Score", round(df["priority_score"].mean(), 2))
+c1.metric("Revenue at Risk", f"${df['revenue_at_risk'].sum():,.2f}")
+c2.metric("High Risk Customers", (df["risk"] == "High").sum())
+c3.metric("Avg Priority Score", round(df["priority_score"].mean(), 2))
 
 # =========================
 # TOP CUSTOMERS
 # =========================
 st.subheader("🎯 Top Customers to Retain")
 
-top = df.sort_values("priority_score", ascending=False).head(10)
-st.dataframe(top)
+st.dataframe(df.sort_values("priority_score", ascending=False).head(10))
 
 # =========================
 # FULL DATA
 # =========================
-st.subheader("📈 Predictions")
+st.subheader("📈 Full Predictions")
 st.dataframe(df)
 
 # =========================
@@ -121,40 +121,48 @@ st.subheader("💰 Revenue by Segment")
 st.bar_chart(df.groupby("customer_segment")["revenue_at_risk"].sum())
 
 # =====================================================
-# 🧠 SHAP DASHBOARD (FULLY FIXED)
+# 🧠 SHAP DASHBOARD (FULL FIX - NO STRING ERROR)
 # =====================================================
 
 st.subheader("🧠 SHAP Explainability Dashboard")
 
 try:
-    model = predict.get_model()
+    pipeline = predict.get_pipeline()
 
-    # sample for speed
-    X_sample = X.sample(min(100, len(X)), random_state=42)
+    # sample data
+    X_sample_raw = X.sample(min(100, len(X)), random_state=42)
 
-    # IMPORTANT: transform safely if pipeline exists
-    if hasattr(model, "predict"):
-        explainer = shap.TreeExplainer(model)
-    else:
-        st.warning("Model not SHAP compatible")
-        st.stop()
+    # IMPORTANT: transform before SHAP
+    X_transformed = pipeline[:-1].transform(X_sample_raw)
 
-    shap_values = explainer.shap_values(X_sample)
+    model = pipeline.named_steps["model"]
+
+    explainer = shap.TreeExplainer(model)
+
+    shap_values = explainer.shap_values(X_transformed)
 
     # -------------------------
-    # SELECT CUSTOMER
+    # CUSTOMER SELECTOR
     # -------------------------
-    customer_idx = st.selectbox("Select Customer Index", X_sample.index)
+    idx = st.selectbox("Select Customer Index", X_sample_raw.index)
 
     st.write("### 👤 Customer Data")
-    st.write(X_sample.loc[customer_idx])
+    st.write(X_sample_raw.loc[idx])
 
-    pos = X_sample.index.get_loc(customer_idx)
+    pos = X_sample_raw.index.get_loc(idx)
 
     values = shap_values[pos]
 
+    # -------------------------
+    # FEATURE NAMES SAFE HANDLING
+    # -------------------------
+    try:
+        feature_names = pipeline[:-1].get_feature_names_out()
+    except:
+        feature_names = [f"feature_{i}" for i in range(len(values))]
+
     explanation_df = pd.DataFrame({
-        "Feature": X_sample.columns,
+        "Feature": feature_names,
         "Impact": values
     })
 
@@ -164,20 +172,20 @@ try:
         ascending=False
     )
 
-    st.write("### 📊 Feature Impact")
+    st.write("### 📊 Feature Impact Ranking")
     st.dataframe(explanation_df)
 
     # -------------------------
     # BUSINESS INSIGHT
     # -------------------------
-    top_feature = explanation_df.iloc[0]
+    top = explanation_df.iloc[0]
 
-    direction = "increases churn risk" if top_feature["Impact"] > 0 else "reduces churn risk"
+    direction = "increases churn risk" if top["Impact"] > 0 else "reduces churn risk"
 
-    st.info(f"Primary driver: **{top_feature['Feature']}** → {direction}")
+    st.info(f"Primary driver: **{top['Feature']}** → {direction}")
 
     # -------------------------
-    # VISUALIZATION
+    # TOP DRIVERS CHART
     # -------------------------
     st.write("### 🔍 Top 5 Drivers")
 
@@ -187,12 +195,12 @@ except Exception as e:
     st.warning(f"SHAP not available: {e}")
 
 # =========================
-# DOWNLOAD
+# DOWNLOAD OUTPUT
 # =========================
 csv = df.to_csv(index=False).encode("utf-8")
 
 st.download_button(
-    "Download Results",
+    "📥 Download Results",
     csv,
     "churn_results.csv"
 )
