@@ -1,25 +1,17 @@
 import streamlit as st
 import pandas as pd
 import os
-import sys
-from pathlib import Path
-
 import shap
+import matplotlib.pyplot as plt
 
 import predict
 import business
 import train_model
 
-# -------------------------
-# STREAMLIT SAFE PATH FIX
-# -------------------------
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
-
 st.set_page_config(page_title="Telecom Churn Intelligence System", layout="wide")
 
 st.title("📡 Telecom Churn Intelligence System")
-st.markdown("Predict churn + revenue risk + explain decisions")
+st.markdown("Churn prediction + revenue risk + explainable AI")
 
 # -------------------------
 # LOAD DATA
@@ -43,7 +35,7 @@ if not os.path.exists("models/churn_pipeline.pkl"):
     st.warning("Training model...")
 
     if "churn" not in df.columns:
-        st.error("Dataset must contain 'churn'")
+        st.error("Dataset must include 'churn'")
         st.stop()
 
     train_model.train_pipeline(df)
@@ -61,7 +53,7 @@ df["churn_probability"] = probs
 df["risk"] = df["churn_probability"].apply(predict.assign_risk)
 
 # -------------------------
-# BUSINESS LAYER
+# BUSINESS LOGIC
 # -------------------------
 df = business.calculate_revenue(df)
 df = business.calculate_priority(df)
@@ -89,7 +81,7 @@ col1, col2, col3 = st.columns(3)
 
 col1.metric("Revenue at Risk", f"${df['revenue_at_risk'].sum():,.2f}")
 col2.metric("High Risk Customers", (df["risk"] == "High").sum())
-col3.metric("Avg Priority", round(df["priority_score"].mean(), 2))
+col3.metric("Avg Priority Score", round(df["priority_score"].mean(), 2))
 
 # -------------------------
 # TOP CUSTOMERS
@@ -102,7 +94,7 @@ st.dataframe(top)
 # -------------------------
 # FULL DATA
 # -------------------------
-st.subheader("📈 Predictions Table")
+st.subheader("📈 Predictions")
 st.dataframe(df)
 
 # -------------------------
@@ -115,38 +107,34 @@ st.subheader("💰 Revenue by Segment")
 st.bar_chart(df.groupby("customer_segment")["revenue_at_risk"].sum())
 
 # =====================================================
-# 🧠 INTERACTIVE SHAP DASHBOARD
+# 🧠 SHAP INTERACTIVE DASHBOARD (FIXED)
 # =====================================================
 
-st.subheader("🧠 Interactive SHAP Explainability Dashboard")
+st.subheader("🧠 SHAP Explainability Dashboard")
 
 try:
     model = predict.get_model()
 
-    # sample for performance
+    # sample for speed
     X_sample = X.sample(min(200, len(X)), random_state=42)
 
-    # SHAP explainer
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X_sample)
 
     # -------------------------
-    # CUSTOMER SELECTOR
+    # SELECT CUSTOMER
     # -------------------------
-    customer_index = st.selectbox(
-        "Select Customer Index",
-        X_sample.index
-    )
+    idx = st.selectbox("Select Customer Index", X_sample.index)
 
-    st.markdown("### 👤 Customer Data")
-    st.write(X_sample.loc[customer_index])
+    st.write("### 👤 Customer Data")
+    st.write(X_sample.loc[idx])
 
     # -------------------------
-    # FEATURE IMPACT TABLE
+    # SHAP VALUES FOR CUSTOMER
     # -------------------------
-    st.markdown("### 📊 Feature Impact (Why this customer churns)")
+    row_index = X_sample.index.get_loc(idx)
 
-    values = shap_values[customer_index]
+    values = shap_values[row_index]
 
     explanation_df = pd.DataFrame({
         "Feature": X_sample.columns,
@@ -159,28 +147,27 @@ try:
         ascending=False
     )
 
+    st.write("### 📊 Feature Impact")
     st.dataframe(explanation_df)
 
     # -------------------------
-    # TOP DRIVER INSIGHT
+    # BUSINESS INSIGHT
     # -------------------------
-    top_feature = explanation_df.iloc[0]
+    top = explanation_df.iloc[0]
 
-    direction = "increases risk" if top_feature["Impact"] > 0 else "reduces risk"
+    direction = "increases churn risk" if top["Impact"] > 0 else "reduces churn risk"
 
-    st.info(
-        f"Primary churn driver: **{top_feature['Feature']}** → {direction}"
-    )
+    st.info(f"Primary driver: **{top['Feature']}** → {direction}")
 
     # -------------------------
-    # TOP 5 DRIVERS CHART
+    # VISUALIZATION
     # -------------------------
-    st.markdown("### 🔍 Top 5 Drivers")
+    st.write("### 🔍 Top 5 Drivers")
 
     st.bar_chart(explanation_df.head(5).set_index("Feature"))
 
 except Exception as e:
-    st.warning(f"SHAP dashboard unavailable: {e}")
+    st.warning(f"SHAP not available: {e}")
 
 # -------------------------
 # DOWNLOAD
