@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
 import os
+import shap
+import matplotlib.pyplot as plt
 
-from src.predict import predict_churn, assign_risk
+from src.predict import predict_churn, assign_risk, get_model
 from src.train_model import train_pipeline
 from src.business import (
     calculate_revenue,
@@ -11,13 +13,13 @@ from src.business import (
     smart_action
 )
 
-st.set_page_config(page_title="Telecom Churn System", layout="wide")
+st.set_page_config(page_title="Telecom Churn Intelligence System", layout="wide")
 
+# -------------------------
+# TITLE
+# -------------------------
 st.title("📡 Telecom Churn Intelligence System")
-
-st.markdown("""
-### 💡 Identify churn, quantify revenue risk, and optimize retention strategy
-""")
+st.markdown("### Predict churn, quantify revenue risk, and optimize retention strategy")
 
 # -------------------------
 # SIDEBAR
@@ -58,20 +60,20 @@ if not os.path.exists("models/churn_pipeline.pkl"):
         st.stop()
 
     train_pipeline(df)
-
     st.success("✅ Pipeline trained successfully")
 
 # -------------------------
 # PREDICTION
 # -------------------------
 X = df.drop(columns=["churn"], errors="ignore")
+
 probs = predict_churn(X)
 
 df["churn_probability"] = probs
 df["risk"] = df["churn_probability"].apply(assign_risk)
 
 # -------------------------
-# BUSINESS INTELLIGENCE
+# BUSINESS LAYER
 # -------------------------
 df = calculate_revenue(df)
 df = calculate_priority(df)
@@ -93,16 +95,8 @@ st.subheader("📊 Key Metrics")
 col1, col2, col3 = st.columns(3)
 
 col1.metric("Customers", len(df))
-
-col2.metric(
-    "High Risk",
-    (df["risk"] == "High").sum()
-)
-
-col3.metric(
-    "Avg Churn Probability",
-    round(df["churn_probability"].mean(), 2)
-)
+col2.metric("High Risk", (df["risk"] == "High").sum())
+col3.metric("Avg Churn Probability", round(df["churn_probability"].mean(), 2))
 
 # -------------------------
 # BUSINESS METRICS
@@ -150,12 +144,57 @@ st.subheader("💰 Revenue at Risk by Segment")
 st.bar_chart(df.groupby("customer_segment")["revenue_at_risk"].sum())
 
 # -------------------------
+# SHAP EXPLAINABILITY
+# -------------------------
+st.subheader("🧠 Model Explainability")
+
+try:
+    pipeline = get_model()
+    model = pipeline.named_steps["model"]
+
+    # Sample data (performance safe)
+    sample_size = min(100, len(X))
+    sample = X.sample(sample_size, random_state=42)
+
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(sample)
+
+    # -------------------------
+    # GLOBAL FEATURE IMPORTANCE
+    # -------------------------
+    st.write("### 🔍 Top Churn Drivers")
+
+    fig, ax = plt.subplots()
+    shap.summary_plot(shap_values, sample, show=False)
+    st.pyplot(fig)
+
+    # -------------------------
+    # INDIVIDUAL EXPLANATION
+    # -------------------------
+    st.write("### 👤 Explain Individual Customer")
+
+    idx = st.slider("Select Customer", 0, sample_size - 1, 0)
+
+    fig2 = plt.figure()
+    shap.force_plot(
+        explainer.expected_value[1],
+        shap_values[1][idx],
+        sample.iloc[idx],
+        matplotlib=True,
+        show=False
+    )
+    st.pyplot(fig2)
+
+except Exception as e:
+    st.warning(f"⚠️ SHAP explanation not available: {e}")
+
+# -------------------------
 # INSIGHTS
 # -------------------------
 st.subheader("💡 Insights")
 
 high_pct = (df["risk"] == "High").mean() * 100
-st.write(f"{round(high_pct,2)}% of customers are high risk")
+st.write(f"{round(high_pct, 2)}% of customers are high risk")
 
 # -------------------------
 # DOWNLOAD
