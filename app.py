@@ -1,114 +1,78 @@
 import streamlit as st
 import pandas as pd
 import os
-import sys
-from pathlib import Path
-import shap
-import matplotlib.pyplot as plt
 
-# -------------------------
-# FIX STREAMLIT PATH ISSUE
-# -------------------------
-ROOT_DIR = Path(__file__).parent
-sys.path.append(str(ROOT_DIR))
+import predict
+import business
+import train_model
 
-from src.predict import predict_churn, assign_risk, get_model
-from src.train_model import train_pipeline
-from src.business import (
-    calculate_revenue,
-    calculate_priority,
-    segment_customers,
-    smart_action
-)
-
-# -------------------------
-# PAGE CONFIG
-# -------------------------
 st.set_page_config(page_title="Telecom Churn Intelligence System", layout="wide")
 
 st.title("📡 Telecom Churn Intelligence System")
-st.markdown("Predict churn, revenue risk, and optimize retention decisions")
-
-# -------------------------
-# SIDEBAR
-# -------------------------
-st.sidebar.header("Controls")
-
-uploaded_file = st.sidebar.file_uploader("Upload CSV")
-use_sample = st.sidebar.button("Use Sample Data")
-
-risk_filter = st.sidebar.selectbox(
-    "Filter by Risk",
-    ["All", "High", "Medium", "Low"]
-)
+st.markdown("Predict churn + revenue risk + retention strategy")
 
 # -------------------------
 # LOAD DATA
 # -------------------------
+uploaded_file = st.file_uploader("Upload CSV")
+use_sample = st.button("Use Sample Data")
+
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
 elif use_sample:
     df = pd.read_csv("data/raw.csv")
-    st.success("Using sample data")
 
 else:
-    st.info("Upload a dataset or use sample data")
     st.stop()
 
 # -------------------------
-# AUTO TRAIN IF MODEL MISSING
+# TRAIN MODEL IF MISSING
 # -------------------------
 if not os.path.exists("models/churn_pipeline.pkl"):
     st.warning("Training model...")
 
     if "churn" not in df.columns:
-        st.error("Dataset must include 'churn' column for training")
+        st.error("Dataset must contain 'churn' column")
         st.stop()
 
-    train_pipeline(df)
-    st.success("Model trained successfully")
+    train_model.train_pipeline(df)
+    st.success("Model trained")
 
 # -------------------------
 # PREDICTION
 # -------------------------
 X = df.drop(columns=["churn"], errors="ignore")
 
-probs = predict_churn(X)
+probs = predict.predict_churn(X)
 
 df["churn_probability"] = probs
-df["risk"] = df["churn_probability"].apply(assign_risk)
+df["risk"] = df["churn_probability"].apply(predict.assign_risk)
 
 # -------------------------
 # BUSINESS LOGIC
 # -------------------------
-df = calculate_revenue(df)
-df = calculate_priority(df)
-df = segment_customers(df)
+df = business.calculate_revenue(df)
+df = business.calculate_priority(df)
+df = business.segment_customers(df)
 
-df["action"] = df.apply(smart_action, axis=1)
-
-# -------------------------
-# FILTER
-# -------------------------
-if risk_filter != "All":
-    df = df[df["risk"] == risk_filter]
+df["action"] = df.apply(business.smart_action, axis=1)
 
 # -------------------------
 # METRICS
 # -------------------------
-st.subheader("Key Metrics")
+st.subheader("📊 Key Metrics")
 
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Total Customers", len(df))
+col1.metric("Customers", len(df))
 col2.metric("High Risk", (df["risk"] == "High").sum())
-col3.metric("Avg Churn Probability", round(df["churn_probability"].mean(), 2))
+col3.metric("Avg Churn", round(df["churn_probability"].mean(), 2))
 
 # -------------------------
 # BUSINESS IMPACT
 # -------------------------
-st.subheader("Business Impact")
+st.subheader("💰 Business Impact")
 
 col1, col2, col3 = st.columns(3)
 
@@ -118,8 +82,8 @@ col1.metric(
 )
 
 col2.metric(
-    "High Value Risk Customers",
-    ((df["risk"] == "High") & (df["customer_segment"] == "High")).sum()
+    "High Risk Customers",
+    (df["risk"] == "High").sum()
 )
 
 col3.metric(
@@ -130,62 +94,25 @@ col3.metric(
 # -------------------------
 # TOP CUSTOMERS
 # -------------------------
-st.subheader("Top Customers to Retain")
+st.subheader("🎯 Top Customers to Retain")
 
 top = df.sort_values("priority_score", ascending=False).head(10)
 st.dataframe(top)
 
 # -------------------------
-# FULL DATA
+# FULL TABLE
 # -------------------------
-st.subheader("Predictions")
+st.subheader("📈 Full Predictions")
 st.dataframe(df)
 
 # -------------------------
 # VISUALS
 # -------------------------
-st.subheader("Risk Distribution")
+st.subheader("📊 Risk Distribution")
 st.bar_chart(df["risk"].value_counts())
 
-st.subheader("Revenue by Segment")
+st.subheader("💰 Revenue by Segment")
 st.bar_chart(df.groupby("customer_segment")["revenue_at_risk"].sum())
-
-# -------------------------
-# SHAP EXPLAINABILITY
-# -------------------------
-st.subheader("Model Explainability (SHAP)")
-
-try:
-    pipeline = get_model()
-    model = pipeline.named_steps["model"]
-
-    sample = X.sample(min(100, len(X)), random_state=42)
-
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(sample)
-
-    st.write("Feature Importance")
-
-    fig, ax = plt.subplots()
-    shap.summary_plot(shap_values, sample, show=False)
-    st.pyplot(fig)
-
-    st.write("Individual Explanation")
-
-    idx = st.slider("Select Customer", 0, len(sample)-1, 0)
-
-    fig2 = plt.figure()
-    shap.force_plot(
-        explainer.expected_value[1],
-        shap_values[1][idx],
-        sample.iloc[idx],
-        matplotlib=True,
-        show=False
-    )
-    st.pyplot(fig2)
-
-except Exception as e:
-    st.warning(f"SHAP not available: {e}")
 
 # -------------------------
 # DOWNLOAD
