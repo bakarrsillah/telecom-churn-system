@@ -1,23 +1,27 @@
 import joblib
 import os
 
-PIPELINE_PATH = "models/churn_pipeline.pkl"
+MODEL_PATH = "models/churn_pipeline.pkl"
 
 pipeline = None
 
 
-def load_pipeline():
+# -------------------------
+# LOAD MODEL
+# -------------------------
+def load_model():
     global pipeline
     if pipeline is None:
-        pipeline = joblib.load(PIPELINE_PATH)
+        pipeline = joblib.load(MODEL_PATH)
+    return pipeline
 
 
 # -------------------------
 # PREDICTION
 # -------------------------
-def predict_churn(df):
-    load_pipeline()
-    return pipeline.predict_proba(df)[:, 1]
+def predict_churn(X):
+    model = load_model()
+    return model.predict_proba(X)[:, 1]
 
 
 # -------------------------
@@ -33,10 +37,10 @@ def assign_risk(prob):
 
 
 # -------------------------
-# GET MODEL FOR SHAP (IMPORTANT FIX)
+# SHAP SUPPORT (IMPORTANT)
 # -------------------------
-def get_model():
-    load_pipeline()
-
-    # IMPORTANT: extract ONLY model (not pipeline)
-    return pipeline.named_steps["model"]
+def get_pipeline():
+    """
+    Used ONLY for SHAP + feature extraction
+    """
+    return load_model()
