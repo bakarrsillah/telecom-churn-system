@@ -1,15 +1,15 @@
 # =========================
-# IMPORTS (MUST BE FIRST)
+# IMPORTS
 # =========================
 import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import shap
 import sys
 from pathlib import Path
-import shap
 
-# Ensure project root path
+# Ensure project root is accessible
 ROOT = Path(__file__).resolve().parent
 sys.path.append(str(ROOT))
 
@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 st.title("📡 Telecom Churn Intelligence System")
-st.markdown("End-to-end churn prediction + revenue risk + explainable AI")
+st.markdown("End-to-end ML system: churn prediction + revenue risk + explainable AI")
 
 # =========================
 # LOAD DATA
@@ -51,14 +51,15 @@ if not os.path.exists("models/churn_pipeline.pkl"):
     st.warning("Training model...")
 
     if "churn" not in df.columns:
-        st.error("Dataset must include 'churn'")
+        st.error("Dataset must contain 'churn'")
         st.stop()
 
     train_model.train_pipeline(df)
+
     st.success("Model trained successfully")
 
 # =========================
-# PREDICTIONS
+# PREDICTION PIPELINE
 # =========================
 X = df.drop(columns=["churn"], errors="ignore")
 
@@ -68,7 +69,7 @@ df["churn_probability"] = probs
 df["risk"] = df["churn_probability"].apply(predict.assign_risk)
 
 # =========================
-# BUSINESS ENGINE
+# BUSINESS LOGIC
 # =========================
 df = business.calculate_revenue(df)
 df = business.calculate_priority(df)
@@ -77,7 +78,7 @@ df = business.segment_customers(df)
 df["action"] = df.apply(business.smart_action, axis=1)
 
 # =========================
-# DASHBOARD METRICS
+# METRICS
 # =========================
 st.subheader("📊 Overview")
 
@@ -121,20 +122,22 @@ st.subheader("💰 Revenue by Segment")
 st.bar_chart(df.groupby("customer_segment")["revenue_at_risk"].sum())
 
 # =====================================================
-# 🧠 SHAP DASHBOARD (FULL FIX - NO STRING ERROR)
+# 🧠 SHAP EXPLAINABILITY (FULLY FIXED)
 # =====================================================
 
 st.subheader("🧠 SHAP Explainability Dashboard")
 
 try:
+    # get full pipeline safely
     pipeline = predict.get_pipeline()
 
-    # sample data
+    # sample raw data
     X_sample_raw = X.sample(min(100, len(X)), random_state=42)
 
-    # IMPORTANT: transform before SHAP
+    # transform using pipeline (FIX FOR STRING ERROR)
     X_transformed = pipeline[:-1].transform(X_sample_raw)
 
+    # extract model
     model = pipeline.named_steps["model"]
 
     explainer = shap.TreeExplainer(model)
@@ -142,11 +145,11 @@ try:
     shap_values = explainer.shap_values(X_transformed)
 
     # -------------------------
-    # CUSTOMER SELECTOR
+    # SELECT CUSTOMER
     # -------------------------
     idx = st.selectbox("Select Customer Index", X_sample_raw.index)
 
-    st.write("### 👤 Customer Data")
+    st.write("### 👤 Customer Data (Raw)")
     st.write(X_sample_raw.loc[idx])
 
     pos = X_sample_raw.index.get_loc(idx)
@@ -185,7 +188,7 @@ try:
     st.info(f"Primary driver: **{top['Feature']}** → {direction}")
 
     # -------------------------
-    # TOP DRIVERS CHART
+    # VISUALIZATION
     # -------------------------
     st.write("### 🔍 Top 5 Drivers")
 
