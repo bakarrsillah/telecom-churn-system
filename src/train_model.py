@@ -1,35 +1,34 @@
 import joblib
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 
-def train_models(X, y):
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+from src.pipeline import build_pipeline
 
-    models = {
-        "logistic": LogisticRegression(max_iter=1000),
-        "random_forest": RandomForestClassifier()
-    }
 
-    best_model = None
-    best_score = 0
+def train_pipeline(df):
 
-    for name, model in models.items():
-        model.fit(X_train, y_train)
-        preds = model.predict(X_test)
-        score = accuracy_score(y_test, preds)
-        print(f"{name} accuracy: {score}")
-        if score > best_score:
-            best_score = score
-            best_model = model
+    # Split features and target
+    y = df["churn"]
+    X = df.drop(columns=["churn"])
 
-    print(f"\n✅ Best Model Selected (Accuracy: {best_score})")
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
 
-    # Save model + features
-    joblib.dump(best_model, "models/churn_model.pkl")
-    feature_names = X.columns.tolist()
-    joblib.dump(feature_names, "models/features.pkl")
+    pipeline = build_pipeline()
 
-    print("✅ Model and feature list saved")
-    return best_model
+    # Train
+    pipeline.fit(X_train, y_train)
+
+    # Evaluate
+    preds = pipeline.predict(X_test)
+    acc = accuracy_score(y_test, preds)
+
+    print(f"✅ Pipeline Accuracy: {acc}")
+
+    # Save FULL pipeline
+    joblib.dump(pipeline, "models/churn_pipeline.pkl")
+
+    print("✅ Pipeline saved to models/churn_pipeline.pkl")
+
+    return pipeline
