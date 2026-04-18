@@ -17,36 +17,16 @@ def load_pipeline():
 
 
 # -------------------------
-# PREDICT CHURN (ONLY PROBABILITY)
+# PREDICT
 # -------------------------
 def predict_churn(df):
-
     load_pipeline()
-
-    probs = pipeline.predict_proba(df)[:, 1]
-
-    return probs
+    return pipeline.predict_proba(df)[:, 1]
 
 
 # -------------------------
-# RISK SCORING
+# GET MODEL FOR SHAP
 # -------------------------
-def assign_risk(prob):
-    if prob > 0.75:
-        return "High"
-    elif prob > 0.4:
-        return "Medium"
-    else:
-        return "Low"
-
-
-# -------------------------
-# RECOMMENDATION ENGINE
-# -------------------------
-def recommend_action(risk):
-    if risk == "High":
-        return "Offer 1GB bonus / discount"
-    elif risk == "Medium":
-        return "Send promotional SMS"
-    else:
-        return "Maintain engagement"
+def get_model():
+    load_pipeline()
+    return pipeline
