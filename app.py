@@ -5,11 +5,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
-import shap
 import sys
 from pathlib import Path
+import shap
 
-# Ensure project root is accessible
+# project root fix
 ROOT = Path(__file__).resolve().parent
 sys.path.append(str(ROOT))
 
@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 st.title("📡 Telecom Churn Intelligence System")
-st.markdown("End-to-end ML system: churn prediction + revenue risk + explainable AI")
+st.markdown("Churn prediction + revenue risk + explainability (SHAP)")
 
 # =========================
 # LOAD DATA
@@ -41,11 +41,10 @@ elif use_sample:
     df = pd.read_csv("data/raw.csv")
 
 else:
-    st.info("Upload dataset or click sample data")
     st.stop()
 
 # =========================
-# TRAIN MODEL IF NOT EXISTS
+# TRAIN MODEL IF NEEDED
 # =========================
 if not os.path.exists("models/churn_pipeline.pkl"):
     st.warning("Training model...")
@@ -56,10 +55,10 @@ if not os.path.exists("models/churn_pipeline.pkl"):
 
     train_model.train_pipeline(df)
 
-    st.success("Model trained successfully")
+    st.success("Model trained")
 
 # =========================
-# PREDICTION PIPELINE
+# PREDICTIONS
 # =========================
 X = df.drop(columns=["churn"], errors="ignore")
 
@@ -78,7 +77,7 @@ df = business.segment_customers(df)
 df["action"] = df.apply(business.smart_action, axis=1)
 
 # =========================
-# METRICS
+# DASHBOARD METRICS
 # =========================
 st.subheader("📊 Overview")
 
@@ -122,22 +121,20 @@ st.subheader("💰 Revenue by Segment")
 st.bar_chart(df.groupby("customer_segment")["revenue_at_risk"].sum())
 
 # =====================================================
-# 🧠 SHAP EXPLAINABILITY (FULLY FIXED)
+# 🧠 SHAP (FULLY FIXED, NO SHAPE ERRORS)
 # =====================================================
 
 st.subheader("🧠 SHAP Explainability Dashboard")
 
 try:
-    # get full pipeline safely
     pipeline = predict.get_pipeline()
 
-    # sample raw data
+    # sample raw input
     X_sample_raw = X.sample(min(100, len(X)), random_state=42)
 
-    # transform using pipeline (FIX FOR STRING ERROR)
+    # transform safely
     X_transformed = pipeline[:-1].transform(X_sample_raw)
 
-    # extract model
     model = pipeline.named_steps["model"]
 
     explainer = shap.TreeExplainer(model)
@@ -145,28 +142,39 @@ try:
     shap_values = explainer.shap_values(X_transformed)
 
     # -------------------------
+    # FIX SHAP OUTPUT TYPE
+    # -------------------------
+    if isinstance(shap_values, list):
+        shap_values = shap_values[1]  # binary classification fix
+
+    # -------------------------
     # SELECT CUSTOMER
     # -------------------------
     idx = st.selectbox("Select Customer Index", X_sample_raw.index)
 
-    st.write("### 👤 Customer Data (Raw)")
+    st.write("### 👤 Customer Data")
     st.write(X_sample_raw.loc[idx])
 
     pos = X_sample_raw.index.get_loc(idx)
 
-    values = shap_values[pos]
+    row = np.array(shap_values[pos]).reshape(-1)
 
     # -------------------------
-    # FEATURE NAMES SAFE HANDLING
+    # FEATURE NAMES SAFE
     # -------------------------
     try:
         feature_names = pipeline[:-1].get_feature_names_out()
     except:
-        feature_names = [f"feature_{i}" for i in range(len(values))]
+        feature_names = [f"feature_{i}" for i in range(len(row))]
 
+    feature_names = feature_names[:len(row)]
+
+    # -------------------------
+    # BUILD EXPLANATION TABLE
+    # -------------------------
     explanation_df = pd.DataFrame({
         "Feature": feature_names,
-        "Impact": values
+        "Impact": row
     })
 
     explanation_df = explanation_df.sort_values(
